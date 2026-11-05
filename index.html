@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Viral Clipper</title>
+<style>
+body{background:#000;color:#fff;font-family:sans-serif;text-align:center;padding:15px}
+h1{font-size:24px} video{width:100%;max-width:400px;border-radius:12px;background:#222}
+input,button,select{width:100%;padding:12px;margin:8px 0;border-radius:10px;border:0;font-size:16px}
+button{background:#ff0050;color:#fff;font-weight:bold}
+.card{background:#111;padding:15px;border-radius:15px;margin-top:10px}
+label{font-size:14px;color:#aaa}
+</style>
+</head>
+<body>
+<h1>✂️ Viral Clipper</h1>
+<p>Make TikTok / Reels clips in seconds</p>
+
+<input type="file" id="file" accept="video/*">
+<video id="vid" controls playsinline></video>
+
+<div class="card">
+<label>Start: <span id="sVal">0</span>s</label>
+<input type="range" id="start" min="0" max="10" step="0.1" value="0">
+<label>End: <span id="eVal">5</span>s</label>
+<input type="range" id="end" min="0" max="10" step="0.1" value="5">
+<label>Caption Text</label>
+<input type="text" id="caption" placeholder="Type viral caption...">
+<button onclick="preview()">▶ Preview Clip</button>
+<button onclick="downloadClip()">⬇ Download Clip</button>
+<p id="status"></p>
+</div>
+
+<script>
+let vid=document.getElementById('vid');
+let file=document.getElementById('file');
+file.onchange=e=>{
+  let url=URL.createObjectURL(e.target.files[0]);
+  vid.src=url;
+  vid.onloadedmetadata=()=>{
+    document.getElementById('start').max=vid.duration;
+    document.getElementById('end').max=vid.duration;
+    document.getElementById('end').value=Math.min(5,vid.duration);
+    document.getElementById('eVal').innerText=document.getElementById('end').value;
+  }
+}
+document.getElementById('start').oninput=e=>{document.getElementById('sVal').innerText=e.target.value; vid.currentTime=e.target.value}
+document.getElementById('end').oninput=e=>{document.getElementById('eVal').innerText=e.target.value}
+function preview(){
+  vid.currentTime=document.getElementById('start').value;
+  vid.play();
+  setTimeout(()=>vid.pause(), (document.getElementById('end').value-document.getElementById('start').value)*1000);
+}
+function downloadClip(){
+  document.getElementById('status').innerText="Recording clip... keep this tab open";
+  let stream=vid.captureStream();
+  let rec=new MediaRecorder(stream,{mimeType:'video/webm'});
+  let chunks=[];
+  rec.ondataavailable=e=>chunks.push(e.data);
+  rec.onstop=()=>{
+    let blob=new Blob(chunks,{type:'video/webm'});
+    let a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='viral-clip.webm';
+    a.click();
+    document.getElementById('status').innerText="Done! Saved to downloads ✅";
+  }
+  vid.currentTime=document.getElementById('start').value;
+  vid.play(); rec.start();
+  setTimeout(()=>{vid.pause(); rec.stop()}, (document.getElementById('end').value-document.getElementById('start').value)*1000);
+}
+</script>
+</body>
+</html>
