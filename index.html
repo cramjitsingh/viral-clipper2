@@ -23,7 +23,6 @@ label{font-size:13px;color:#aaa}
 <body>
 <h1>✂️ Viral Clipper PRO V6</h1>
 <p>Captions ON Video • Real Auto Captions • Real Clips</p>
-
 <div class="card">
 <label>1. UPLOAD - FILE OR LINK</label>
 <input type="file" id="file" accept="video/*">
@@ -35,8 +34,159 @@ label{font-size:13px;color:#aaa}
 </div>
 <canvas id="canvas" width="720" height="1280" style="display:none"></canvas>
 </div>
-
 <div class="card">
 <label>2. REAL AUTO CAPTIONS - NOW ON THE VIDEO!</label>
 <button id="capBtn" onclick="toggleCaptions()">🎤 START AUTO CAPTIONS</button>
-<p id="capStatus" style="font-size:13px
+<p id="capStatus" style="font-size:13px;color:#00FF88">Tap START, then play video. Words will appear ON the video itself.</p>
+<label>Full Transcript:</label>
+<div id="transcript" style="font-size:14px;line-height:1.6;background:#000;padding:10px;border-radius:10px;min-height:50px">No speech yet...</div>
+<button onclick="clearTranscript()" style="background:#333">Clear Transcript</button>
+</div>
+<div class="card">
+<label>3. SPLIT INTO CLIPS</label>
+<div class="row">
+<select id="clipCount"><option value="1">1 Clip</option><option value="2">2 Clips</option><option value="3" selected>3 Clips</option><option value="4">4 Clips</option><option value="5">5 Clips</option></select>
+<select id="clipLen"><option value="7">7s</option><option value="10">10s</option><option value="15">15s</option><option value="30">30s</option></select>
+</div>
+<button onclick="autoSplit()">✂️ SPLIT MY VIDEO</button>
+<div id="clipList"></div>
+<div id="clipInfo" style="font-size:13px;color:#aaa"></div>
+</div>
+<div class="card">
+<label>🔥 VIRALITY SCORE - FROM REAL SPEECH</label>
+<div class="score" id="scoreNum">-- / 100</div>
+<div class="bar"><div class="barFill" id="scoreBar"></div></div>
+<div id="scoreTips" style="font-size:13px;line-height:1.7"></div>
+<button onclick="updateScore()" style="background:#222">RE-CHECK SCORE</button>
+</div>
+<div class="card">
+<label>4. DOWNLOAD WITH CAPTIONS BURNED ON VIDEO</label>
+<select id="whichClip"><option value="0">Download Clip 1</option></select>
+<button onclick="downloadBurned()">⬇ DOWNLOAD WITH CAPTIONS ON VIDEO</button>
+<p id="status" style="font-size:13px;color:#00FF88"></p>
+<p style="font-size:12px;color:#888">The downloaded video will have the words ON the video itself, just like TikTok. No black box below.</p>
+</div>
+<div class="card">
+<label>5. POST IT</label>
+<div class="row"><button class="shareBtn" onclick="shareTo('tiktok')">🎵 TikTok</button><button class="shareBtn" onclick="shareTo('instagram')">📸 Instagram</button></div>
+<div class="row"><button class="shareBtn" onclick="shareTo('facebook')">📘 Facebook</button><button class="shareBtn" onclick="shareTo('youtube')">▶️ YouTube</button></div>
+<div class="row"><button class="shareBtn" onclick="shareTo('x')">𝕏 X</button><button class="shareBtn" onclick="shareTo('whatsapp')">💬 WhatsApp</button></div>
+</div>
+  <script>
+let vid=document.getElementById('vid'), clips=[], transcript=[], recognition=null, listening=false;
+let overlay=document.getElementById('liveCapOverlay');
+document.getElementById('file').onchange=e=>{
+  vid.src=URL.createObjectURL(e.target.files[0]);
+  vid.onloadedmetadata=()=>{autoSplit(); updateScore(); document.getElementById('status').innerText='Video loaded: '+Math.round(vid.duration)+'s';}
+};
+function loadLink(){
+  let u=document.getElementById('videoLink').value.trim();
+  if(!u){alert('Paste a video link first');return}
+  vid.src=u; vid.crossOrigin='anonymous';
+  vid.onloadedmetadata=()=>{autoSplit(); updateScore(); document.getElementById('status').innerText='Link loaded: '+Math.round(vid.duration)+'s';}
+  vid.onerror=()=>{alert('That link cannot play directly. Use Choose File or a direct MP4 link.');}
+}
+function toggleCaptions(){
+  if(listening){stopCaptions();return}
+  let SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){alert('Auto Captions need Google Chrome on Android. Open in Chrome.');return}
+  recognition=new SR(); recognition.continuous=true; recognition.interimResults=true; recognition.lang='en-US';
+  recognition.onresult=e=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){
+      let t=e.results[i][0].transcript;
+      if(e.results[i].isFinal){
+        transcript.push({text:t.trim(), time:vid.currentTime});
+        document.getElementById('transcript').innerText=transcript.map(s=>s.text).join(' ');
+        updateScore();
+      } else interim=t;
+    }
+    if(interim) overlay.innerText=interim.toUpperCase();
+  };
+  recognition.onend=()=>{ if(listening) recognition.start(); };
+  recognition.start(); listening=true;
+  document.getElementById('capBtn').innerText='🛑 STOP AUTO CAPTIONS'; document.getElementById('capBtn').style.background='#333';
+  document.getElementById('capStatus').innerText='🎤 LISTENING... Words now appear ON the video!';
+  vid.muted=false; vid.play();
+}
+function stopCaptions(){
+  listening=false; if(recognition) recognition.stop();
+  document.getElementById('capBtn').innerText='🎤 START AUTO CAPTIONS'; document.getElementById('capBtn').style.background='#ff0050';
+  document.getElementById('capStatus').innerText='Stopped. Transcript saved.';
+}
+function clearTranscript(){transcript=[]; document.getElementById('transcript').innerText='No speech yet...'; overlay.innerText=''; updateScore();}
+function autoSplit(){
+  if(!vid.duration||!vid.src){document.getElementById('clipList').innerHTML='Upload video first';return}
+  let n=+document.getElementById('clipCount').value, len=+document.getElementById('clipLen').value;
+  clips=[]; let html='', opts='';
+  for(let i=0;i<n;i++){let s=i*len; if(s>=vid.duration)break; let e=Math.min(s+len,vid.duration); clips.push({start:s,end:e}); html+=`<button class="chip" onclick="playClip(${i})">▶ Clip ${i+1} (${s.toFixed(0)}s-${e.toFixed(0)}s)</button>`; opts+=`<option value="${i}">Download Clip ${i+1} (${s.toFixed(0)}s-${e.toFixed(0)}s)</option>`;}
+  document.getElementById('clipList').innerHTML=html; document.getElementById('whichClip').innerHTML=opts;
+  document.getElementById('clipInfo').innerText=`Made ${clips.length} real clips from your ${Math.round(vid.duration)}s video.`;
+  updateScore();
+}
+function playClip(i){vid.currentTime=clips[i].start; vid.muted=false; vid.play(); setTimeout(()=>vid.pause(),(clips[i].end-clips[i].start)*1000)}
+function updateScore(){
+  let full=transcript.map(s=>s.text).join(' ').toLowerCase();
+  let words=full.split(' ').filter(w=>w.length>0).length;
+  let score=0, tips=[];
+  if(vid.src){ if(vid.duration<=15){score+=30; tips.push('✅ +30 Video '+Math.round(vid.duration)+'s - perfect');} else if(vid.duration<=30){score+=22; tips.push('✅ +22 Video '+Math.round(vid.duration)+'s');} else {score+=10; tips.push('⚠️ +10 Video '+Math.round(vid.duration)+'s - long');} }
+  if(words>=20){score+=30; tips.push('✅ +30 Real speech: '+words+' words');}
+  else if(words>0){score+=15; tips.push('⚠️ +15 Only '+words+' words - play full video with captions ON');}
+  else{tips.push('❌ +0 No speech yet. Tap START AUTO CAPTIONS and play video');}
+  let hooks=['wait','watch','crazy','insane','nobody','secret','why','look','viral','omg','check'];
+  let found=hooks.filter(h=>full.includes(h));
+  if(found.length>0){score+=20; tips.push('✅ +20 Hook word: "'+found[0]+'"');}
+  if(clips.length>=3){score+=15; tips.push('✅ +15 '+clips.length+' clips');}
+  if(transcript.length>0){score+=5; tips.push('✅ +5 Auto captions ON');}
+  score=Math.min(100,Math.round(score));
+  document.getElementById('scoreNum').innerText=score+' / 100';
+  document.getElementById('scoreBar').style.width=score+'%';
+  document.getElementById('scoreBar').style.background=score>=80?'#00FF88':score>=50?'#FFE600':'#FF0050';
+  document.getElementById('scoreTips').innerHTML=tips.join('<br>');
+}
+function getCapAtTime(t){
+  let cur=null;
+  for(let s of transcript){ if(t>=s.time && t<=s.time+4) cur=s; }
+  if(!cur && transcript.length>0){ for(let i=transcript.length-1;i>=0;i--){ if(t-transcript[i].time<5 && t>=transcript[i].time){cur=transcript[i];break} } }
+  return cur?cur.text.toUpperCase():'';
+}
+function drawFrame(canvas,ctx){
+  ctx.drawImage(vid,0,0,720,1280);
+  let cap=getCapAtTime(vid.currentTime);
+  overlay.innerText=cap||'';
+  if(cap){
+    ctx.font='900 52px sans-serif'; ctx.textAlign='center'; ctx.lineWidth=10; ctx.strokeStyle='black';
+    let words=cap.split(' '), lines=[], line='';
+    words.forEach(w=>{ if((line+' '+w).length>20){lines.push(line); line=w} else line=line?line+' '+w:w }); lines.push(line);
+    lines.forEach((l,idx)=>{let yy=950+(idx-(lines.length-1)/2)*65; ctx.strokeText(l,360,yy); ctx.fillStyle='#FFE600'; ctx.fillText(l,360,yy)});
+  }
+}
+async function downloadBurned(){
+  if(!vid.src){alert('Upload a video first');return}
+  if(transcript.length===0){ if(!confirm('No speech captured yet. Download without captions?')) return; }
+  let idx=+document.getElementById('whichClip').value;
+  let clip=clips[idx]||{start:0,end:5};
+  let canvas=document.getElementById('canvas'), ctx=canvas.getContext('2d');
+  document.getElementById('status').innerText='⏳ Burning captions ON video for Clip '+(idx+1)+'...';
+  vid.muted=false; vid.currentTime=clip.start;
+  await new Promise(r=>{vid.onseeked=r; setTimeout(r,500)});
+  vid.play();
+  let stream=canvas.captureStream(30);
+  try{let aStream=vid.captureStream(); let at=aStream.getAudioTracks()[0]; if(at) stream.addTrack(at);}catch(e){}
+  let mime=MediaRecorder.isTypeSupported('video/webm')?'video/webm':'video/mp4';
+  let rec=new MediaRecorder(stream,{mimeType:mime}); let chunks=[];
+  rec.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data)};
+  rec.onstop=()=>{let blob=new Blob(chunks,{type:mime}); let a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='viral-clip-'+(idx+1)+'-captions-on-video.webm'; a.click(); document.getElementById('status').innerText='✅ DONE! Clip '+(idx+1)+' downloaded WITH captions ON video.'}
+  let timer=setInterval(()=>{ if(vid.currentTime>=clip.end||vid.ended){clearInterval(timer); vid.pause(); rec.stop()} drawFrame(canvas,ctx) },33);
+  rec.start();
+}
+function shareTo(p){
+  let text=encodeURIComponent((transcript.map(s=>s.text).join(' ').slice(0,80)||'Check this out!')+' #viral #fyp');
+  let url=encodeURIComponent('https://cramjitsingh.github.io/viral-clipper2/');
+  let links={tiktok:'https://www.tiktok.com/upload',instagram:'https://www.instagram.com/',facebook:'https://www.facebook.com/sharer/sharer.php?u='+url+'&quote='+text,youtube:'https://www.youtube.com/upload',x:'https://twitter.com/intent/tweet?text='+text+'&url='+url,whatsapp:'https://wa.me/?text='+text+'%20'+url};
+  window.open(links[p],'_blank');
+}
+updateScore();
+</script>
+</body>
+</html>
