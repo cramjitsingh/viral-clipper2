@@ -2,73 +2,132 @@
 <html>
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Viral Clipper</title>
+<title>Viral Clipper PRO - REAL</title>
 <style>
-body{background:#000;color:#fff;font-family:sans-serif;text-align:center;padding:15px}
-h1{font-size:24px} video{width:100%;max-width:400px;border-radius:12px;background:#222}
-input,button,select{width:100%;padding:12px;margin:8px 0;border-radius:10px;border:0;font-size:16px}
+body{background:#000;color:#fff;font-family:sans-serif;text-align:center;padding:12px}
+video{width:100%;max-width:360px;border-radius:12px;background:#222;aspect-ratio:9/16;object-fit:cover}
+input,button,select{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:0;font-size:15px}
 button{background:#ff0050;color:#fff;font-weight:bold}
-.card{background:#111;padding:15px;border-radius:15px;margin-top:10px}
-label{font-size:14px;color:#aaa}
+.card{background:#151515;padding:14px;border-radius:15px;margin-top:10px;text-align:left}
+label{font-size:13px;color:#aaa}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.chip{background:#222;color:#fff;padding:8px;border-radius:20px;font-size:13px}
+.score{font-size:48px;font-weight:900;text-align:center}
+.bar{height:14px;background:#333;border-radius:10px;overflow:hidden}
+.barFill{height:100%;background:#00FF88;width:0%;transition:0.5s}
+.shareBtn{background:#222}
+.check{font-size:13px;line-height:1.7}
 </style>
 </head>
 <body>
-<h1>✂️ Viral Clipper</h1>
-<p>Make TikTok / Reels clips in seconds</p>
-
+<h1>✂️ Viral Clipper PRO</h1>
+<p>Real Clips • Real Burned Captions • Real Score</p>
 <input type="file" id="file" accept="video/*">
-<video id="vid" controls playsinline></video>
-
+<video id="vid" controls playsinline muted></video>
+<canvas id="canvas" width="720" height="1280" style="display:none"></canvas>
 <div class="card">
-<label>Start: <span id="sVal">0</span>s</label>
-<input type="range" id="start" min="0" max="10" step="0.1" value="0">
-<label>End: <span id="eVal">5</span>s</label>
-<input type="range" id="end" min="0" max="10" step="0.1" value="5">
-<label>Caption Text</label>
-<input type="text" id="caption" placeholder="Type viral caption...">
-<button onclick="preview()">▶ Preview Clip</button>
-<button onclick="downloadClip()">⬇ Download Clip</button>
-<p id="status"></p>
+<label>1. HOW MANY CLIPS?</label>
+<select id="clipCount" onchange="autoSplit()"><option value="1">1 Clip</option><option value="2">2 Clips</option><option value="3" selected>3 Clips</option><option value="4">4 Clips</option><option value="5">5 Clips</option></select>
+<label>CLIP LENGTH</label>
+<select id="clipLen" onchange="autoSplit()"><option value="7">7s - Best</option><option value="10">10s</option><option value="15">15s</option><option value="30">30s</option></select>
+<button onclick="autoSplit()">✂️ SPLIT MY VIDEO</button>
+<div id="clipList"></div>
+<div id="clipInfo" style="font-size:13px;color:#aaa"></div>
 </div>
-
+<div class="card">
+<label>2. CAPTION - WILL BE BURNED INTO VIDEO</label>
+<input type="text" id="caption" placeholder="WAIT FOR IT 😱" oninput="updateScore()">
+<div class="row">
+<select id="capColor"><option value="white">White Text</option><option value="#FFE600">Yellow</option><option value="#00FF88">Green</option><option value="#FF0050">Pink</option></select>
+<select id="capPos"><option value="top">Top</option><option value="middle" selected>Middle</option><option value="bottom">Bottom</option></select>
+</div>
+<label>Preview: <span id="capPreview" style="color:#FFE600;font-weight:bold"></span></label>
+</div>
+<div class="card">
+<label>🔥 VIRALITY SCORE - BASED ON YOUR ACTUAL VIDEO</label>
+<div class="score" id="scoreNum">-- / 100</div>
+<div class="bar"><div class="barFill" id="scoreBar"></div></div>
+<div class="check" id="scoreTips"></div>
+<button onclick="updateScore()" style="background:#222">RE-CHECK SCORE</button>
+</div>
+<div class="card">
+<label>3. DOWNLOAD REAL CLIP</label>
+<select id="whichClip"><option value="0">Download Clip 1</option></select>
+<button onclick="downloadBurned()">⬇ DOWNLOAD WITH BURNED CAPTIONS</button>
+<p id="status" style="font-size:13px;color:#00FF88"></p>
+</div>
+<div class="card">
+<label>4. POST IT</label>
+<div class="row"><button class="shareBtn" onclick="shareTo('tiktok')">🎵 TikTok</button><button class="shareBtn" onclick="shareTo('instagram')">📸 Instagram</button></div>
+<div class="row"><button class="shareBtn" onclick="shareTo('facebook')">📘 Facebook</button><button class="shareBtn" onclick="shareTo('youtube')">▶️ YouTube</button></div>
+<div class="row"><button class="shareBtn" onclick="shareTo('x')">𝕏 X</button><button class="shareBtn" onclick="shareTo('whatsapp')">💬 WhatsApp</button></div>
+</div>
 <script>
-let vid=document.getElementById('vid');
-let file=document.getElementById('file');
-file.onchange=e=>{
-  let url=URL.createObjectURL(e.target.files[0]);
-  vid.src=url;
-  vid.onloadedmetadata=()=>{
-    document.getElementById('start').max=vid.duration;
-    document.getElementById('end').max=vid.duration;
-    document.getElementById('end').value=Math.min(5,vid.duration);
-    document.getElementById('eVal').innerText=document.getElementById('end').value;
+let vid=document.getElementById('vid'), clips=[];
+document.getElementById('caption').addEventListener('input',e=>{document.getElementById('capPreview').innerText=e.target.value});
+document.getElementById('file').onchange=e=>{
+  vid.src=URL.createObjectURL(e.target.files[0]);
+  vid.onloadedmetadata=()=>{autoSplit(); updateScore(); document.getElementById('status').innerText='Video loaded: '+Math.round(vid.duration)+'s long. Ready.';}
+};
+function autoSplit(){
+  if(!vid.duration||!vid.src){document.getElementById('clipList').innerHTML='Upload video first';return}
+  let n=+document.getElementById('clipCount').value, len=+document.getElementById('clipLen').value;
+  clips=[]; let html='', opts='';
+  for(let i=0;i<n;i++){let s=i*len; if(s>=vid.duration)break; let e=Math.min(s+len,vid.duration); clips.push({start:s,end:e}); html+=`<button class="chip" onclick="playClip(${i})">▶ Clip ${i+1} (${s.toFixed(0)}s-${e.toFixed(0)}s)</button>`; opts+=`<option value="${i}">Download Clip ${i+1} (${s.toFixed(0)}s-${e.toFixed(0)}s)</option>`;}
+  document.getElementById('clipList').innerHTML=html;
+  document.getElementById('whichClip').innerHTML=opts;
+  document.getElementById('clipInfo').innerText=`Made ${clips.length} real clips from your ${Math.round(vid.duration)}s video. Tap one to preview.`;
+  updateScore();
+}
+function playClip(i){vid.currentTime=clips[i].start; vid.muted=false; vid.play(); setTimeout(()=>vid.pause(),(clips[i].end-clips[i].start)*1000)}
+function updateScore(){
+  let cap=document.getElementById('caption').value||'';
+  let lower=cap.toLowerCase();
+  let score=0, tips=[];
+  if(!vid.src){tips.push('⬜ Upload video to score'); score=0;}
+  else{
+    if(vid.duration<=15){score+=30; tips.push('✅ +30 Video is '+Math.round(vid.duration)+'s - perfect length');}
+    else if(vid.duration<=30){score+=22; tips.push('✅ +22 Video is '+Math.round(vid.duration)+'s - good length');}
+    else if(vid.duration<=60){score+=12; tips.push('⚠️ +12 Video is '+Math.round(vid.duration)+'s - a bit long');}
+    else{score+=5; tips.push('❌ +5 Video is '+Math.round(vid.duration)+'s - too long');}
+  }
+  let hooks=['wait','watch','part','crazy','insane','nobody','secret','why','omg','look','viral','pov'];
+  let found=hooks.filter(h=>lower.includes(h));
+  if(found.length>0){score+=25; tips.push('✅ +25 Hook word found: "'+found[0]+'"');}
+  else if(cap.length>0){score+=8; tips.push('⚠️ +8 No hook word. Add WAIT, WATCH, POV, SECRET');}
+  else{tips.push('❌ +0 No caption. Add "WAIT FOR IT"');}
+  if(cap.length>=10 && cap.length<=60){score+=15; tips.push('✅ +15 Caption length '+cap.length+' chars - perfect');}
+  else if(cap.length>0){score+=7; tips.push('⚠️ +7 Caption '+cap.length+' chars - aim for 15-40');}
+  if(cap.includes('#')){score+=5; tips.push('✅ +5 Hashtag found');}
+  if(/[\u{1F300}-\u{1FAFF}]/u.test(cap)){score+=10; tips.push('✅ +10 Emoji found');}
+  else if(cap.length>0){tips.push('💡 Add 🔥 or 😱 for +10');}
+  let n=clips.length;
+  if(n>=3){score+=15; tips.push('✅ +15 '+n+' clips = '+n+' chances');}
+  else if(n==2){score+=10; tips.push('✅ +10 2 clips');}
+  else if(n==1){score+=5; tips.push('⚠️ +5 Only 1 clip. Use 3');}
+  score=Math.min(100,Math.round(score));
+  document.getElementById('scoreNum').innerText=score+' / 100';
+  document.getElementById('scoreBar').style.width=score+'%';
+  document.getElementById('scoreBar').style.background=score>=80?'#00FF88':score>=50?'#FFE600':'#FF0050';
+  document.getElementById('scoreTips').innerHTML=tips.join('<br>');
+  return score;
+}
+function drawFrame(canvas,ctx){
+  ctx.drawImage(vid,0,0,720,1280);
+  let cap=document.getElementById('caption').value;
+  if(cap){
+    ctx.font='900 58px sans-serif'; ctx.textAlign='center';
+    ctx.lineWidth=10; ctx.strokeStyle='black';
+    let y=document.getElementById('capPos').value=='top'?180:document.getElementById('capPos').value=='middle'?640:1080;
+    let words=cap.split(' '), lines=[], line='';
+    words.forEach(w=>{ if((line+' '+w).length>18){lines.push(line); line=w} else line=line?line+' '+w:w }); lines.push(line);
+    lines.forEach((l,idx)=>{let yy=y+(idx-(lines.length-1)/2)*70; ctx.strokeText(l,360,yy); ctx.fillStyle=document.getElementById('capColor').value; ctx.fillText(l,360,yy)});
   }
 }
-document.getElementById('start').oninput=e=>{document.getElementById('sVal').innerText=e.target.value; vid.currentTime=e.target.value}
-document.getElementById('end').oninput=e=>{document.getElementById('eVal').innerText=e.target.value}
-function preview(){
-  vid.currentTime=document.getElementById('start').value;
-  vid.play();
-  setTimeout(()=>vid.pause(), (document.getElementById('end').value-document.getElementById('start').value)*1000);
-}
-function downloadClip(){
-  document.getElementById('status').innerText="Recording clip... keep this tab open";
-  let stream=vid.captureStream();
-  let rec=new MediaRecorder(stream,{mimeType:'video/webm'});
-  let chunks=[];
-  rec.ondataavailable=e=>chunks.push(e.data);
-  rec.onstop=()=>{
-    let blob=new Blob(chunks,{type:'video/webm'});
-    let a=document.createElement('a');
-    a.href=URL.createObjectURL(blob);
-    a.download='viral-clip.webm';
-    a.click();
-    document.getElementById('status').innerText="Done! Saved to downloads ✅";
-  }
-  vid.currentTime=document.getElementById('start').value;
-  vid.play(); rec.start();
-  setTimeout(()=>{vid.pause(); rec.stop()}, (document.getElementById('end').value-document.getElementById('start').value)*1000);
-}
-</script>
-</body>
-</html>
+async function downloadBurned(){
+  if(!vid.src){alert('Upload a video first');return}
+  let idx=+document.getElementById('whichClip').value;
+  let clip=clips[idx]||{start:0,end:5};
+  let canvas=document.getElementById('canvas'), ctx=canvas.getContext('2d');
+  document.getElementById('status').innerText='⏳ Burning captions into Clip '+(idx+1)+'... DO NOT close tab...';
+ 
