@@ -1,5 +1,5 @@
 import streamlit as st
-import os, subprocess, tempfile, textwrap, random
+import os, subprocess, tempfile, random
 
 st.set_page_config(page_title="Viral Clipper 2", layout="centered")
 st.title("🔥 VIRAL CLIPPER 2")
@@ -14,7 +14,7 @@ if st.button("🔥 MAKE VIRAL CLIPS"):
         st.error("Upload a video or paste a link first")
         st.stop()
 
-    with st.spinner("Transcribing + making clips... 1-2 mins..."):
+    with st.spinner("Transcribing + making clips... 2-3 mins..."):
         tmpdir = tempfile.mkdtemp()
         input_path = os.path.join(tmpdir, "input.mp4")
 
@@ -33,29 +33,26 @@ if st.button("🔥 MAKE VIRAL CLIPS"):
         ass_path = os.path.join(tmpdir, "subs.ass")
         words = []
         has_captions = False
+
         try:
             import whisper
-            model = whisper.load_model("base")
-            result = model.transcribe(input_path, language="en", word_timestamps=True, initial_prompt="Trinidad and Tobago. Labour Inspectorate Unit. Ministry of Labour. Public Holiday and Festivals Act. Independence Weekend. Public holiday falls on Sunday observed on Monday. Double time, triple time. Overtime rates.")
-            
-            all_words = []
-            for seg in result["segments"]:
-                if "words" in seg:
-                    all_words.extend(seg["words"])
-            
-            if not all_words:
-                for seg in result["segments"]:
-                    all_words.append({"word": seg["text"], "start": seg["start"], "end": seg["end"]})
+            # THIS IS THE ONE THAT WORKED BEFORE - small, whole sentences, no word-timestamps
+            model = whisper.load_model("small")
+            result = model.transcribe(
+                input_path,
+                language="en",
+                fp16=False,
+                initial_prompt="Good morning, Labour Inspectorate Unit. How can I help you? Trinidad and Tobago. Public Holiday and Festivals Act. Independence Weekend. Public holiday falls on Sunday observed on Monday. Double time, triple time."
+            )
 
-            # --- NEON GREEN SPOTLIGHT / KARAOKE ---
-            # White words, current word turns NEON GREEN
+            # --- NEON GREEN - WHOLE SENTENCE STYLE (the good one) ---
             header = """[Script Info]
 ScriptType: v4.00+
 PlayResX: 720
 PlayResY: 1280
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Spotlight,Arial Black,26,&H00FFFFFF,&H0000FF00,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,2,20,20,220,1
+Style: Spotlight,Arial Black,28,&H0000FF00,&H0000FF00,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,2,20,20,220,1
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
@@ -65,19 +62,24 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
             with open(ass_path, "w", encoding="utf-8") as f:
                 f.write(header)
-                for i in range(0, len(all_words), 5):
-                    chunk = all_words[i:i+5]
-                    start = chunk[0]["start"]
-                    end = chunk[-1]["end"] + 0.3
-                    line_text = ""
-                    for w in chunk:
-                        dur_cs = max(10, int((w["end"] - w["start"]) * 100))
-                        clean = w["word"].strip().upper().replace("{","").replace("}","")
-                        line_text += f"{{\\k{dur_cs}}}{clean} "
-                        words.append(clean)
-                    f.write(f"Dialogue: 0,{fmt_ass(start)},{fmt_ass(end)},Spotlight,,0,0,0,,{line_text.strip()}\n")
+                for seg in result["segments"]:
+                    text = seg["text"].strip().upper().replace("{","").replace("}","")
+                    if not text:
+                        continue
+                    # Keep lines short so they fit - max 4-5 words per line like TikTok
+                    chunk_words = text.split()
+                    # Split segment into 2 lines if too long
+                    for k in range(0, len(chunk_words), 5):
+                        chunk = " ".join(chunk_words[k:k+5])
+                        # Spread timing across chunk
+                        total = seg["end"] - seg["start"]
+                        parts = (len(chunk_words) + 4) // 5
+                        cs = seg["start"] + (k//5) * (total / max(1, parts))
+                        ce = cs + (total / max(1, parts))
+                        f.write(f"Dialogue: 0,{fmt_ass(cs)},{fmt_ass(ce)},Spotlight,,0,0,0,,{chunk}\n")
+                        words.append(chunk)
             has_captions = True
-            st.success(f"Transcribed: {' '.join(words)[:120]}...")
+            st.success(f"Transcribed: {' '.join(words)[:150]}...")
         except Exception as e:
             st.warning(f"Captions failed: {e}")
             has_captions = False
@@ -95,7 +97,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
             out_path = os.path.join(tmpdir, f"clip_{i+1}.mp4")
             vf = "crop=ih*9/16:ih,scale=720:1280"
-            
             if has_captions and os.path.exists(ass_path):
                 ass_escaped = ass_path.replace(":", "\\:").replace("'", "")
                 vf += f",ass='{ass_escaped}'"
